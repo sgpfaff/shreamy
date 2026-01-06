@@ -201,21 +201,43 @@ def set_default_units(ro: float = 8.0, vo: float = 220.0) -> None:
 # =============================================================================
 
 
-def to_astropy_units():
+def to_astropy_units(ro: float = 8.0, vo: float = 220.0):
     """
-    Return astropy unit equivalencies for the current unit system.
+    Return astropy unit equivalencies for the given unit system.
 
     Requires astropy to be installed.
+
+    Parameters
+    ----------
+    ro, vo : float
+        Unit scales.
 
     Returns
     -------
     dict
-        Dictionary mapping natural unit quantities to astropy units.
+        Dictionary mapping unit types to astropy units.
+
+    Examples
+    --------
+    >>> units_dict = to_astropy_units()
+    >>> print(units_dict['position'])
+    8.0 kpc
     """
-    raise NotImplementedError("Astropy integration not yet implemented")
+    try:
+        import astropy.units as u
+    except ImportError:
+        raise ImportError("astropy is required for this function. Install with: pip install astropy")
+
+    unit_sys = UnitSystem(ro, vo)
+    return {
+        'position': ro * u.kpc,
+        'velocity': vo * u.km / u.s,
+        'time': unit_sys.time_in_gyr * u.Gyr,
+        'mass': unit_sys.mass_in_msun * u.Msun,
+    }
 
 
-def from_astropy_quantity(quantity, target: str) -> np.ndarray:
+def from_astropy_quantity(quantity, target: str, ro: float = 8.0, vo: float = 220.0) -> np.ndarray:
     """
     Convert an astropy Quantity to shreamy natural units.
 
@@ -225,13 +247,208 @@ def from_astropy_quantity(quantity, target: str) -> np.ndarray:
         The quantity to convert.
     target : str
         Target unit type: 'position', 'velocity', 'time', 'mass'.
+    ro, vo : float
+        Unit scales.
 
     Returns
     -------
     ndarray
         Values in natural units.
+
+    Examples
+    --------
+    >>> import astropy.units as u
+    >>> pos = 16 * u.kpc
+    >>> from_astropy_quantity(pos, 'position')
+    2.0
     """
-    raise NotImplementedError("Astropy integration not yet implemented")
+    try:
+        import astropy.units as u
+    except ImportError:
+        raise ImportError("astropy is required for this function. Install with: pip install astropy")
+
+    unit_sys = UnitSystem(ro, vo)
+
+    if target == 'position':
+        return quantity.to(u.kpc).value / ro
+    elif target == 'velocity':
+        return quantity.to(u.km / u.s).value / vo
+    elif target == 'time':
+        return quantity.to(u.Gyr).value / unit_sys.time_in_gyr
+    elif target == 'mass':
+        return quantity.to(u.Msun).value / unit_sys.mass_in_msun
+    else:
+        raise ValueError(f"Unknown target: {target}. Use 'position', 'velocity', 'time', or 'mass'.")
+
+
+# =============================================================================
+# Flexible input conversion (float with units flag OR astropy Quantity)
+# =============================================================================
+
+
+def _is_astropy_quantity(value) -> bool:
+    """Check if value is an astropy Quantity."""
+    try:
+        import astropy.units as u
+        return isinstance(value, u.Quantity)
+    except ImportError:
+        return False
+
+
+def to_natural(value, unit_type: str, physical: bool = False,
+               ro: float = 8.0, vo: float = 220.0) -> np.ndarray:
+    """
+    Convert a value to natural units.
+
+    This is a flexible function that accepts:
+    1. A float/array assumed to be in natural units (default)
+    2. A float/array in physical units if physical=True
+    3. An astropy Quantity (automatically detected and converted)
+
+    Parameters
+    ----------
+    value : float, array-like, or astropy.units.Quantity
+        The value to convert.
+    unit_type : str
+        Type of unit: 'position', 'velocity', 'time', 'mass'.
+    physical : bool, default False
+        If True and value is not an astropy Quantity, treat value as
+        being in physical units (kpc, km/s, Gyr, Msun).
+        Ignored if value is an astropy Quantity.
+    ro, vo : float
+        Unit scales for conversion.
+
+    Returns
+    -------
+    ndarray
+        Value in natural units.
+
+    Examples
+    --------
+    >>> # Default: value is already in natural units
+    >>> to_natural(2.0, 'position')
+    2.0
+
+    >>> # Physical units: need conversion
+    >>> to_natural(16.0, 'position', physical=True)  # 16 kpc -> 2.0
+    2.0
+
+    >>> # Astropy Quantity: auto-detected
+    >>> import astropy.units as u
+    >>> to_natural(16 * u.kpc, 'position')
+    2.0
+    """
+    # Check if astropy Quantity
+    if _is_astropy_quantity(value):
+        return from_astropy_quantity(value, unit_type, ro=ro, vo=vo)
+
+    # Convert to array for consistent handling
+    arr = np.atleast_1d(np.asarray(value))
+
+    if not physical:
+        # Already in natural units
+        return arr if arr.size > 1 else arr[0]
+
+    # Convert from physical units
+    unit_sys = UnitSystem(ro, vo)
+
+    if unit_type == 'position':
+        result = unit_sys.position_from_physical(arr)
+    elif unit_type == 'velocity':
+        result = unit_sys.velocity_from_physical(arr)
+    elif unit_type == 'time':
+        result = unit_sys.time_from_physical(arr)
+    elif unit_type == 'mass':
+        result = unit_sys.mass_from_physical(arr)
+    else:
+        raise ValueError(f"Unknown unit_type: {unit_type}. Use 'position', 'velocity', 'time', or 'mass'.")
+
+    return result if result.size > 1 else result.item()
+
+
+def to_physical(value, unit_type: str, natural: bool = True,
+                ro: float = 8.0, vo: float = 220.0) -> np.ndarray:
+    """
+    Convert a value to physical units.
+
+    This is a flexible function that accepts:
+    1. A float/array in natural units (default)
+    2. A float/array already in physical units if natural=False
+    3. An astropy Quantity (converted to physical, returned as float)
+
+    Parameters
+    ----------
+    value : float, array-like, or astropy.units.Quantity
+        The value to convert.
+    unit_type : str
+        Type of unit: 'position', 'velocity', 'time', 'mass'.
+    natural : bool, default True
+        If True and value is not an astropy Quantity, treat value as
+        being in natural units and convert to physical.
+        Ignored if value is an astropy Quantity.
+    ro, vo : float
+        Unit scales for conversion.
+
+    Returns
+    -------
+    float or ndarray
+        Value in physical units (kpc, km/s, Gyr, or Msun).
+
+    Examples
+    --------
+    >>> # Default: convert from natural to physical
+    >>> to_physical(2.0, 'position')  # 2.0 natural -> 16.0 kpc
+    16.0
+
+    >>> # Already physical: no conversion
+    >>> to_physical(16.0, 'position', natural=False)
+    16.0
+
+    >>> # Astropy Quantity: extract value in standard physical units
+    >>> import astropy.units as u
+    >>> to_physical(16000 * u.pc, 'position')  # 16000 pc -> 16.0 kpc
+    16.0
+    """
+    # Check if astropy Quantity - convert to standard physical units
+    if _is_astropy_quantity(value):
+        try:
+            import astropy.units as u
+        except ImportError:
+            raise ImportError("astropy is required for Quantity input")
+
+        if unit_type == 'position':
+            return value.to(u.kpc).value
+        elif unit_type == 'velocity':
+            return value.to(u.km / u.s).value
+        elif unit_type == 'time':
+            return value.to(u.Gyr).value
+        elif unit_type == 'mass':
+            return value.to(u.Msun).value
+        else:
+            raise ValueError(f"Unknown unit_type: {unit_type}")
+
+    # Convert to array for consistent handling
+    arr = np.atleast_1d(np.asarray(value))
+
+    if not natural:
+        # Already in physical units
+        return arr if arr.size > 1 else arr[0]
+
+    # Convert from natural units
+    unit_sys = UnitSystem(ro, vo)
+
+    if unit_type == 'position':
+        result = unit_sys.position_to_physical(arr)
+    elif unit_type == 'velocity':
+        result = unit_sys.velocity_to_physical(arr)
+    elif unit_type == 'time':
+        result = unit_sys.time_to_physical(arr)
+    elif unit_type == 'mass':
+        result = unit_sys.mass_to_physical(arr)
+    else:
+        raise ValueError(f"Unknown unit_type: {unit_type}. Use 'position', 'velocity', 'time', or 'mass'.")
+
+    return result if result.size > 1 else result.item()
 
 
 # =============================================================================
@@ -256,8 +473,38 @@ def from_galpy_orbit(orbit, ro: float = 8.0, vo: float = 220.0) -> Tuple[np.ndar
         Shape (N, 3) positions in natural units.
     velocities : ndarray
         Shape (N, 3) velocities in natural units.
+
+    Notes
+    -----
+    Requires galpy to be installed. If the orbit has been integrated,
+    this returns the current state. For full orbit history, use
+    orbit.getOrbit() directly.
     """
-    raise NotImplementedError
+    try:
+        # Get Cartesian coordinates in natural units
+        # galpy returns values in natural units when use_physical=False
+        x = orbit.x(use_physical=False)
+        y = orbit.y(use_physical=False)
+        z = orbit.z(use_physical=False)
+        vx = orbit.vx(use_physical=False)
+        vy = orbit.vy(use_physical=False)
+        vz = orbit.vz(use_physical=False)
+
+        # Handle both single orbits and arrays
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        z = np.atleast_1d(z)
+        vx = np.atleast_1d(vx)
+        vy = np.atleast_1d(vy)
+        vz = np.atleast_1d(vz)
+
+        positions = np.column_stack([x, y, z])
+        velocities = np.column_stack([vx, vy, vz])
+
+        return positions, velocities
+
+    except ImportError:
+        raise ImportError("galpy is required for this function. Install with: pip install galpy")
 
 
 def to_galpy_orbit(
@@ -272,17 +519,56 @@ def to_galpy_orbit(
     Parameters
     ----------
     positions : ndarray
-        Shape (N, 3) positions in natural units.
+        Shape (N, 3) or (3,) positions in natural units (Cartesian x, y, z).
     velocities : ndarray
-        Shape (N, 3) velocities in natural units.
+        Shape (N, 3) or (3,) velocities in natural units (Cartesian vx, vy, vz).
     ro, vo : float
         Unit scales.
 
     Returns
     -------
     galpy.orbit.Orbit
+        Orbit object initialized with given phase space coordinates.
+
+    Notes
+    -----
+    Requires galpy to be installed. Internally converts Cartesian to
+    cylindrical coordinates as required by galpy.
     """
-    raise NotImplementedError
+    try:
+        from galpy.orbit import Orbit
+    except ImportError:
+        raise ImportError("galpy is required for this function. Install with: pip install galpy")
+
+    positions = np.atleast_2d(positions)
+    velocities = np.atleast_2d(velocities)
+
+    n_particles = positions.shape[0]
+
+    orbits = []
+    for i in range(n_particles):
+        x, y, z = positions[i]
+        vx, vy, vz = velocities[i]
+
+        # Convert Cartesian to cylindrical for galpy
+        R = np.sqrt(x**2 + y**2)
+        phi = np.arctan2(y, x)
+
+        if R > 0:
+            vR = (x * vx + y * vy) / R
+            vT = (x * vy - y * vx) / R
+        else:
+            vR = 0.0
+            vT = 0.0
+
+        # galpy expects [R, vR, vT, z, vz, phi]
+        vxvv = [R, vR, vT, z, vz, phi]
+        orb = Orbit(vxvv=vxvv, ro=ro, vo=vo)
+        orbits.append(orb)
+
+    if n_particles == 1:
+        return orbits[0]
+    return orbits
 
 
 # =============================================================================
@@ -303,6 +589,8 @@ def natural_to_gyr(t: float, ro: float = 8.0, vo: float = 220.0) -> float:
 def dynamical_time(
     density: float,
     units: str = "natural",
+    ro: float = 8.0,
+    vo: float = 220.0,
 ) -> float:
     """
     Compute the dynamical time for a given density.
@@ -312,16 +600,30 @@ def dynamical_time(
     Parameters
     ----------
     density : float
-        Mass density.
+        Mass density. In natural units if units='natural',
+        in Msun/kpc^3 if units='physical'.
     units : str, default 'natural'
         'natural' or 'physical'.
+    ro, vo : float
+        Unit scales (only used when units='physical').
 
     Returns
     -------
     float
-        Dynamical time.
+        Dynamical time in the same unit system as input.
     """
-    raise NotImplementedError
+    if units == "natural":
+        # G = 1 in natural units
+        return np.sqrt(3 * np.pi / (16 * density))
+    elif units == "physical":
+        # Convert density to natural units, compute, then convert back
+        unit_sys = UnitSystem(ro, vo)
+        # density_natural = density_physical * (ro^3 / mass_unit)
+        density_natural = density * (ro**3 / unit_sys.mass_in_msun)
+        t_dyn_natural = np.sqrt(3 * np.pi / (16 * density_natural))
+        return t_dyn_natural * unit_sys.time_in_gyr
+    else:
+        raise ValueError(f"Unknown units: {units}. Use 'natural' or 'physical'.")
 
 
 def crossing_time(

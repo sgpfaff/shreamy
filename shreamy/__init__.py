@@ -82,7 +82,13 @@ from .satellite import (
     CustomSatellite,
     CompositeSatellite,
 )
-from .units import UnitSystem, get_default_units, set_default_units
+from .units import (
+    UnitSystem,
+    get_default_units,
+    set_default_units,
+    to_natural,
+    to_physical,
+)
 
 __all__ = [
     # Core
@@ -118,4 +124,6 @@ __all__ = [
     "UnitSystem",
     "get_default_units",
     "set_default_units",
+    "to_natural",
+    "to_physical",
 ]
