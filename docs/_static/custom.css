@@ -1,0 +1,34 @@
+/* Custom CSS for shreamy documentation */
+
+/* Make code blocks stand out a bit more */
+.highlight {
+    border-radius: 6px;
+}
+
+/* Style for the banner image placeholder */
+.stream-banner-placeholder {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%);
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2em;
+    border-radius: 8px;
+    margin-bottom: 2em;
+}
+
+/* Admonition styling tweaks */
+.admonition.tip {
+    border-left-color: #10b981;
+}
+
+.admonition.note {
+    border-left-color: #3b82f6;
+}
+
+/* Grid card hover effects */
+.sd-card:hover {
+    transform: translateY(-2px);
+    transition: transform 0.2s ease;
+}
