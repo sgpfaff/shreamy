@@ -1,0 +1,98 @@
+[build-system]
+requires = [
+  "setuptools>=62.1",
+  "setuptools_scm[toml]>=8.0.0",
+  "wheel",
+  "extension-helpers",
+  "numpy>=1.25",
+  "cython"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shreamy"
+description = "A quick, pythonic nbody solver for simulating minor mergers producing stellar streams and shells."
+requires-python = ">=3.9"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+license = { file = "licenses/LICENSE.rst" }
+authors = [
+  { name = "Gabriel Pfaffman & Claude", email = "gabriel.pfaffman@mail.utoronto.ca" },
+]
+dependencies = [
+    "numpy>=1.20",
+    "galpy>=1.8",
+    "scipy>=1.7",
+    "tqdm",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-doctestplus",
+    "pytest-cov",
+]
+docs = [
+    "sphinx",
+    "sphinx-automodapi",
+]
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["shreamy*"]
+exclude = ["shreamy._dev*"]
+
+[tool.setuptools_scm]
+version_file = "shreamy/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = [
+  "shreamy",
+  "docs",
+]
+doctest_plus = "enabled"
+text_file_format = "rst"
+addopts = "--doctest-rst"
+norecursedirs = ["shreamy[\\/]_dev"]
+
+[tool.coverage.run]
+omit = [
+ "shreamy/__init*",
+ "shreamy/conftest.py",
+ "shreamy/*setup_package*",
+ "shreamy/tests/*",
+ "shreamy/*/tests/*",
+ "shreamy/extern/*",
+ "shreamy/version*",
+ "*/shreamy/__init*",
+ "*/shreamy/conftest.py",
+ "*/shreamy/*setup_package*",
+ "*/shreamy/tests/*",
+ "*/shreamy/*/tests/*",
+ "*/shreamy/extern/*",
+ "*/shreamy/version*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  # Have to re-enable the standard pragma
+  "pragma: no cover",
+  # Don't complain about packages we have installed
+  "except ImportError",
+  # Don't complain if tests don't hit assertions
+  "raise AssertionError",
+  "raise NotImplementedError",
+  # Don't complain about script hooks
+  "def main(.*):",
+  # Ignore branches that don't pertain to this version of Python
+  "pragma: py{ignore_python_version}",
+  # Don't complain about IPython completion helper
+  "def _ipython_key_completions_",
+  # typing.TYPE_CHECKING is False at runtime
+  "if TYPE_CHECKING:",
+  # Ignore typing overloads
+  "@overload",
+]
